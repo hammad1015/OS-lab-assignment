@@ -2,44 +2,54 @@ import os
 import json
 
 
-def save(data):
-    metaData = json.dumps(data)
+def save():
+    data = json.dumps(metaData).replace(' ', '')
+    print(data)
     FILE.seek(0)
-    FILE.write(metaData[:-1])
-    FILE.write((maxMetaDataSize - len(metaData)) * ' ')
+    FILE.write(data[:-1])
+    FILE.write((maxMetaDataSize - len(data)) * ' ')
     FILE.write('}')
     FILE.seek(0)
 
 
 maxMetaDataSize    = 2**10
 
+# initialization code
 if not os.path.exists('sample.data'):
-    FILE = open('sample.data', 'w+')
-    save({})
+    FILE     = open('sample.data', 'w+')
+    metaData = {0:[],1:{}}
+    save()
 else:
     FILE = open('sample.data', 'r+')
 
+# setting root and present working directory
+metaData = json.loads(FILE.read(maxMetaDataSize))
 
-root = FILE.read(maxMetaDataSize)
-root = json.loads(root)
+holes = metaData[0]
+root  = metaData[1]
+PWD   = root
 
-CWD  = root
 
-def Create(fname):
-    CWD[fname] = [[]]
+
+# system functions
+
+def Create(*fnames):
+    for fname in fnames:
+        dir = fname.split('/')
+        Chdir(dir)
+        PWD[fname] = []
     
+def Delete(*fnames):
+    for fname in fnames: holes.extend(PWD[fname]); del PWD[fname]
 
-def Delete(fname):
-    del CWD[fname]
-
-def Mkdir(dir):
-    CWD[dir] = {}
+def Mkdir(*dirs):
+    for dir in dirs: PWD[dir] = {}
 
 def Chdir(dir):
-    global CWD
-    CWD = CWD[dir]
+    global PWD
+    PWD = PWD[dir]
 
-def Move():
+def Move(dir1, dir2):
     pass
 
 def Open(fname, mode= 'w'):
@@ -72,34 +82,33 @@ def ():
 
 
 # CLI 
+switch = {
+    'create': Create,
+    'delete': Delete,
+    'mkdir' : Mkdir,
+    'chdir' : Chdir,
+    'move'  : Move,
+    'open'  : Open,
+    'close' : Close,
+    'quit'  : quit,
+}
 
-while True:
-    statement = input(">").split(" ")
-    try:
-        command = statement[0].lower()
+if __name__ == '__main__':
 
-        if command == "create":
-            fname = statement[1]
-            Create(fname)
-        elif command == "delete":
-            fname = statement[1]
-            Delete(fname)
-        elif command == "mkdir":
-            dir_name = statement[1]
-            Mkdir(dir_name)
-        elif command == "chdir":
-            dir_name = statement[1]
-            Chdir(dir_name)
-        elif command == "move":
-            source_fname = statement[1]
-            target_fname = statement[2]
-            Move(source_fname, target_fname)
-        elif command == "open":
-            fname = statement[1]
-            mode = statement[2]
-            Open(fname, mode)
-        elif command == "close":
-            fname = statement[1]   
-            Close(fname) 
-    except:
-        print("Invalid syntax!")
+    while True:
+        try:
+            stmt = input("> ").split(" ")
+            case = stmt[0].lower()
+            args = stmt[1:]
+
+            save()
+            switch[case](*args)
+            
+            
+        except KeyboardInterrupt:
+            print()
+            break
+
+        except Exception as e:
+            print("Invalid syntax!")
+            print(e)
