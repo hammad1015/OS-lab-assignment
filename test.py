@@ -1,5 +1,6 @@
 import os
 import pickle
+import re
 
 
 def save():
@@ -8,12 +9,12 @@ def save():
     SSD.write(data)
     SSD.write((maxMetaDataSize - len(data)) * b' ')
 
-maxMetaDataSize    = 2**10
 
 # initialization code
+maxMetaDataSize = 2**10
 if not os.path.exists('sample.data'):
     SSD      = open('sample.data', 'wb+')
-    metaData = {0:[],1:{}}
+    metaData = {'h':[],'~':{}}
     save()
 else:
     SSD      = open('sample.data', 'rb+')
@@ -21,74 +22,158 @@ else:
 
 
 # setting root and present working directory
-holes = metaData[0]
-root  = metaData[1]
-pwd   = root
-path  = []
+holes = metaData['h']
+root  = metaData['~']
+PATH  = '~'
 
 
 # system functions
 
-def create(*fnames):
-    for fname in fnames: pwd[fname] = []
+def dir(path):
 
-def mkdir(*dirs):
-    for dir in dirs: pwd[dir] = {}
+    curr = metaData
+    path = path if path.startswith('~') else f'{PATH}/{path}' if path else PATH
+    path = path.split('/')
+
+    temp = ''
+    for i, d in enumerate(path):
+        assert ((d in curr) and (type(curr[d]) is dict)),  f'{"/".join(path[:i+1])}: No such file or directory'
+        curr = curr[d]
+
+    return curr
+
+def split(paths):
+
+    paths = [ e.split('/')      for e in paths ]
+    names = [ e[-1]             for e in paths ]
+    paths = [ '/'.join(e[:-1])  for e in paths ]
+
+    return paths, names
+
+def create(*pfnames):
+    paths, fnames = split(pfnames)
+
+    for path, fname in zip(paths, fnames):
+        dir(path)[fname] = []  
+
+def mkdir(*pdnames):
+    paths, dnames = split(pdnames)
+
+    for path, dname in zip(paths, dnames):
+        dir(path)[dname] = {}
+
+def delete(*pfnames):
+    paths, fnames = split(pfnames)
+
+    for path, fname in zip(paths, fnames):
+        holes.extend(dir(path)[fname])
+        del dir(PATH)[fname]
+
+def chdir(path):
+    global PATH
     
-def delete(*fnames):
-    for fname in fnames: holes.extend(pwd[fname]); del pwd[fname]
+    dir(path)
+    PATH = path if path.startswith('~') else PATH + '/' + path
 
-def chdir(pth):
-    global path, pwd
+def move(fname, path):
     
-    pth  = pth.split('/')
-    rel  = pth[0] in pwd
-    curr = pwd if rel else root
-
-    for d in pth: curr = curr[d]
-
-    path = path + pth if rel else pth
-    pwd  = curr
-
-def move(fname, pth):
-    file = pwd[fname]
-    lpth = '/'.join(path)
-    chdir(pth)
-    pwd[fname] = file
-    chdir(lpth)
-    delete(fname)
+    dir(path)[fname] = dir(PATH)[fname]
+    del dir(PATH)[fname]
 
 def tree(depth= 1):
     pass
 
-class stream():
+def read(path, frm= 0, size= -1):
+    f = file(path)
+    f.seek(frm)
+    print(f.read(size))
+    print()
+    f.close()
 
-    def __init__(self, locs):
-        self.locs = locs
-
-    def read(self, start= 0, size= -1):
-        for i,s in self.locs[::2]:
-            if start < s:
-                SSD.seek(start)
-                SSD.read()
+def write(path, text):
+    f = file(path)
+    f.write(text)
+    f.close()
 
 
+class file():
+
+    def __init__(self, path):
+        path, fname = split([path])
+        path, fname = path[0], fname[0]
+
+        self.chunks = dir(path)[fname]
+        self.data   = b''
+        self.ptr    = 0
+
+        for i,s in self.chunks:
+            SSD.seek(i)
+            self.data += SSD.read(s) 
+
+        self.size = len(self.data)
+            
+
+
+    def seek(self, pos):
+        if pos == -1: pos = self.size
+        assert pos <= self.size, f'File pointer out of range. File size is {self.size}'
+        self.ptr = pos
+
+    def tell(self):
+        return self.ptr
+
+    def read(self, size= -1):
+        start = self.ptr
+        end   = -1 if (size == -1) else start + size
+        self.seek(end)
+        return self.data[start: end]
+
+    def write(self, data):
+        
+        while data:
+            if holes:
+                i, s = holes.pop()
+                if s > len(data): 
+                    holes.append([i+len(data), s-len(data)])
+
+                towrite = data[:s].encode()
+                data = data[s:]
+        
+            else:
+                i = SSD.seek(0, 2)
+                s = len(data)
+
+                towrite = data.encode()
+                data = ''
+
+            i = SSD.seek(i)
+            s = SSD.write(towrite)
+            self.chunks.append([i, s])
+
+
+    def close(self):
+        del self
 
 
 # CLI 
+
+#PS1 = '£ '
+PS1 = '¥ '
+#PS1 = '• '
+
 switch = {
     ''      : lambda: [0],
     'quit'  : lambda: [save(), print(), exit()],
-    'pwd'   : lambda: [print('~/'+'/'.join(path))],
-    'ls'    : lambda: [print(*pwd, sep= '\t')],
+    'pwd'   : lambda: [print(PATH)],
+    'ls'    : lambda: [print(*dir(PATH), sep= '\t')],
     'touch' : create,
     'rm'    : delete,
     'mkdir' : mkdir,
     'cd'    : chdir,
     'mv'    : move,
-
- #   'open'  : Open,
- #   'close' : Close,
+    'cat'   : read,
+    'wrt'   : write,
+    'dump'  : lambda : print(metaData)
 }
 
 if __name__ == '__main__':
@@ -96,12 +181,13 @@ if __name__ == '__main__':
     while True:
             
         save()
-        stmt = input('£ ').split(' ')
+        stmt = input(PS1).split(' ')
         case = stmt[0]
         args = stmt[1:]
 
         try:switch[case](*args)
         
         except (KeyboardInterrupt, EOFError): print(); exit()
+        except AssertionError as e          : print(e)
         except KeyError  as e               : print(e, 'command not found')
-        except Exception as e               : print(type(e))
+        #except Exception as e               : print(type(e))
