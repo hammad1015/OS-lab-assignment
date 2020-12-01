@@ -96,6 +96,23 @@ def write(path, text):
     f.close()
 
 
+def help():
+    print(
+        "Usage: command [argument]\n"
+        "rm [file/folder path] usage: removes file or directory\n"
+        "touch [file path] usage: creates file\n"
+        "mkdir [directory name] usage: creates directory\n"
+        "mv [source directory] [target directory] usage: move file\n"
+        "cat [file path] usage: read file\n"
+        "wrt [file path] [input data] usage: write to file\n"
+        "cd [path] usage: change working directory\n"
+        "pwd usage:\n"
+        "dump usage:\n"
+        "ls usage: list files and folders in current directory\n"
+        "quit usage: exit the file system\n"
+    )
+
+
 class file():
 
     def __init__(self, path):
@@ -173,6 +190,7 @@ switch = {
     'mv'    : move,
     'cat'   : read,
     'wrt'   : write,
+    'help'  : help,
     'dump'  : lambda : print(metaData)
 }
 
